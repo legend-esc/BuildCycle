@@ -1,0 +1,3 @@
+[workspace]
+members = ["batch-token", "escrow", "community-pool"]
+resolver = "2"
