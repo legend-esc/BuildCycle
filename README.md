@@ -9,6 +9,7 @@
 - [Problem](#problem)
 - [Vision](#vision)
 - [How It Works](#how-it-works)
+- [Project Structure](#project-structure)
 - [Architecture Overview](#architecture-overview)
 - [Smart Contracts (Soroban)](#smart-contracts-soroban)
   - [BatchToken Contract](#1-batchtoken-contract)
@@ -81,6 +82,84 @@ Construction projects consistently generate vast amounts of **salvageable materi
                     Seller (95%)            5% to Community      Buyer gets
                                             Tool Library /       proof of
                                             Training Fund        release NFT
+```
+
+---
+
+## Project Structure
+
+```
+buildcycle/
+│
+├── contracts/                          # Soroban smart contracts (Rust)
+│   ├── batch-token/                    #   Batch NFT: mint, metadata, QR, geo
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── lib.rs                  #     BatchTokenContract implementation
+│   ├── escrow/                         #   Escrow: lock, QR pickup, 95/5 split, disputes
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── lib.rs                  #     EscrowContract implementation
+│   ├── community-pool/                 #   Community fund: proposals, voting, distribution
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── lib.rs                  #     CommunityPoolContract implementation
+│   └── path-pay-integration/           #   Integration helpers for Stellar path payments
+│       └── README.md
+│
+├── frontend/                           # Next.js React application
+│   ├── public/                         #   Static assets
+│   ├── src/
+│   │   ├── components/                 #   Reusable UI components
+│   │   │   ├── WalletConnector.tsx
+│   │   │   ├── MapPicker.tsx
+│   │   │   ├── QRGenerator.tsx
+│   │   │   ├── QRScanner.tsx
+│   │   │   ├── ConditionReportCard.tsx
+│   │   │   ├── PathPaySelector.tsx
+│   │   │   └── IPFSUploader.tsx
+│   │   ├── pages/                      #   Next.js pages (routing)
+│   │   │   ├── index.tsx               #     MapView
+│   │   │   ├── browse.tsx              #     ListingGrid
+│   │   │   ├── batches/
+│   │   │   │   └── [id].tsx            #     BatchDetail
+│   │   │   ├── sell.tsx                #     SellForm
+│   │   │   ├── dashboard.tsx           #     UserDashboard
+│   │   │   ├── pool.tsx                #     PoolDashboard
+│   │   │   ├── scan.tsx                #     QRScanner page
+│   │   │   └── disputes.tsx            #     DisputeCenter
+│   │   ├── hooks/                      #   Custom React hooks
+│   │   ├── utils/                      #   Helpers, Stellar SDK wrappers
+│   │   ├── styles/                     #   Tailwind / CSS modules
+│   │   └── types/                      #   TypeScript type definitions
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── backend/                            # Off-chain services
+│   ├── src/
+│   │   ├── routes/                     #   Express route handlers
+│   │   ├── services/                   #   Business logic
+│   │   ├── controllers/                #   Request/response handling
+│   │   ├── models/                     #   Database models
+│   │   ├── middleware/                  #   Auth, validation, error handling
+│   │   └── utils/                      #   Helpers
+│   ├── migrations/                     #   Database migrations
+│   ├── seeds/                          #   Seed data
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── docs/                               # Additional documentation
+│   └── architecture.md
+│
+├── scripts/                            # Deployment and utility scripts
+│   ├── deploy-contracts.sh
+│   ├── setup-testnet.sh
+│   └── seed-database.ts
+│
+├── .env.example
+├── .gitignore
+├── README.md
+└── LICENSE
 ```
 
 ---
