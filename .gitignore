@@ -1,0 +1,8 @@
+target/
+*.wasm
+test_snapshots/
+node_modules/
+.env
+.env.local
+dist/
+.next/
