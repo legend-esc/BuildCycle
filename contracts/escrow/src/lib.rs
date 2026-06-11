@@ -1,5 +1,6 @@
 #![no_std]
 
+use buildcycle_community_pool::CommunityPoolContractClient;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, String,
     Vec,
@@ -261,6 +262,9 @@ impl EscrowContract {
         token.transfer(&contract_address, &escrow.seller, &seller_final);
         token.transfer(&contract_address, &config.pool_address, &applied_fee);
 
+        let pool_client = CommunityPoolContractClient::new(&env, &config.pool_address);
+        pool_client.receive_fee(&applied_fee);
+
         escrow.amount_sent = 0;
         env.storage()
             .instance()
@@ -489,6 +493,7 @@ impl EscrowContract {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use buildcycle_community_pool::CommunityPoolContractClient;
     use soroban_sdk::testutils::{Address as _, Ledger};
 
     fn setup_env(
@@ -500,7 +505,6 @@ mod tests {
         let admin = Address::generate(&env);
         let seller = Address::generate(&env);
         let buyer = Address::generate(&env);
-        let pool = Address::generate(&env);
         let batch_token = Address::generate(&env);
 
         let usdc = env.register_stellar_asset_contract(admin.clone());
@@ -508,6 +512,10 @@ mod tests {
         let sac = token::StellarAssetClient::new(&env, &usdc);
         sac.mint(&buyer, &1_000_000_000);
         sac.mint(&seller, &1_000_000_000);
+
+        let pool = env.register_contract(None, buildcycle_community_pool::CommunityPoolContract);
+        let pool_client = CommunityPoolContractClient::new(&env, &pool);
+        pool_client.initialize(&admin);
 
         let escrow_contract_id = env.register_contract(None, EscrowContract);
         let escrow_client = EscrowContractClient::new(&env, &escrow_contract_id);
@@ -809,5 +817,209 @@ mod tests {
         let h = qr_hash(&env, &BytesN::from_array(&env, &[1u8; 32]));
         let id = create_escrow(&env, &c, 0, &buyer, &seller, &usdc, &h);
         assert_eq!(c.try_dispute(&id, &String::from_str(&env, "Nope")), Err(Ok(Error::InvalidStateTransition)));
+    }
+
+    // --- Integration tests (full flow: batch-token + escrow + community-pool) ---
+
+    fn integration_setup(
+    ) -> (
+        Env,
+        Address,
+        Address,
+        Address,
+        Address,
+        Address,
+        buildcycle_community_pool::CommunityPoolContractClient<'static>,
+        buildcycle_batch_token::BatchTokenContractClient<'static>,
+        EscrowContractClient<'static>,
+    ) {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let seller = Address::generate(&env);
+        let buyer = Address::generate(&env);
+
+        let usdc = env.register_stellar_asset_contract(admin.clone());
+        let sac = token::StellarAssetClient::new(&env, &usdc);
+        sac.mint(&buyer, &1_000_000_000);
+        sac.mint(&seller, &1_000_000_000);
+        sac.mint(&admin, &1_000_000_000);
+
+        // Deploy community-pool contract
+        let pool_id = env.register_contract(
+            None,
+            buildcycle_community_pool::CommunityPoolContract,
+        );
+        let pool_client =
+            buildcycle_community_pool::CommunityPoolContractClient::new(&env, &pool_id);
+        pool_client.initialize(&admin);
+
+        // Deploy batch-token contract
+        let batch_id = env.register_contract(None, buildcycle_batch_token::BatchTokenContract);
+        let batch_client =
+            buildcycle_batch_token::BatchTokenContractClient::new(&env, &batch_id);
+
+        // Deploy escrow contract, pointing to batch-token and community-pool
+        let escrow_id = env.register_contract(None, EscrowContract);
+        let escrow_client = EscrowContractClient::new(&env, &escrow_id);
+        escrow_client.initialize(&admin, &batch_id, &pool_id);
+
+        (env, admin, seller, buyer, usdc, pool_id, pool_client, batch_client, escrow_client)
+    }
+
+    #[test]
+    fn test_full_integration_mint_escrow_release_pool() {
+        let (env, _admin, seller, buyer, usdc, pool_id, pool_client, batch_client, escrow_client) =
+            integration_setup();
+
+        // 1. Mint a batch
+        let meta = buildcycle_batch_token::Metadata {
+            title: String::from_str(&env, "Oak Planks"),
+            category: String::from_str(&env, "lumber"),
+            quantity: 50,
+            unit: String::from_str(&env, "pieces"),
+            condition: String::from_str(&env, "Used"),
+            dimensions: String::from_str(&env, "2x4x96"),
+            gps_lat: 40758700,
+            gps_lon: -73985700,
+            photos_cid: String::from_str(&env, "QmTest123"),
+            description: String::from_str(&env, "Good condition oak planks"),
+        };
+        let secret = BytesN::from_array(&env, &[7u8; 32]);
+        let batch_id = batch_client.mint(&seller, &meta, &secret);
+
+        // 2. Create escrow
+        let qr_hash_val = qr_hash(&env, &secret);
+        let path: Vec<Address> = Vec::new(&env);
+        let escrow_id = escrow_client.create_escrow(
+            &batch_id,
+            &buyer,
+            &seller,
+            &usdc,
+            &usdc,
+            &path,
+            &qr_hash_val,
+        );
+
+        // 3. Lock payment
+        escrow_client.lock_payment(&escrow_id, &500_000_000);
+
+        // 4. Confirm pickup with valid QR
+        escrow_client.confirm_pickup(&escrow_id, &secret);
+
+        // 5. Release funds — verify 95/5 split
+        let seller_bal_before = tc(&env, &usdc).balance(&seller);
+        let pool_tokens_before = tc(&env, &usdc).balance(&pool_id);
+        let pool_balance_before = pool_client.get_balance();
+
+        escrow_client.release_funds(&escrow_id);
+
+        let expected_fee = 500_000_000 * 500 / 10_000;
+        let seller_bal_after = tc(&env, &usdc).balance(&seller);
+        let pool_tokens_after = tc(&env, &usdc).balance(&pool_id);
+        let pool_balance_after = pool_client.get_balance();
+
+        assert_eq!(seller_bal_after - seller_bal_before, 500_000_000 - expected_fee);
+        assert_eq!(pool_tokens_after - pool_tokens_before, expected_fee);
+        assert_eq!(pool_balance_after - pool_balance_before, expected_fee);
+
+        // 6. Propose / vote / distribute from pool
+        let recipient = Address::generate(&env);
+        let name = String::from_str(&env, "Community Tool Library");
+        let cid = String::from_str(&env, "QmProofDoc");
+        let pid = pool_client.propose_recipient(&recipient, &name, &cid);
+
+        pool_client.vote_recipient(&pid, &true);
+        pool_client.vote_recipient(&pid, &true);
+        pool_client.vote_recipient(&pid, &true);
+
+        let recipient_bal_before = tc(&env, &usdc).balance(&recipient);
+        pool_client.distribute(&0, &expected_fee, &usdc);
+        let recipient_bal_after = tc(&env, &usdc).balance(&recipient);
+
+        assert_eq!(recipient_bal_after - recipient_bal_before, expected_fee);
+        assert_eq!(pool_client.get_balance(), 0);
+
+        // 7. Verify distribution history
+        let history = pool_client.get_distribution_history(&0);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history.get(0).unwrap().amount, expected_fee);
+    }
+
+    #[test]
+    fn test_integration_invalid_qr_rejected() {
+        let (env, _admin, seller, buyer, usdc, _pid, _pool, batch_client, escrow_client) =
+            integration_setup();
+
+        let meta = buildcycle_batch_token::Metadata {
+            title: String::from_str(&env, "Test"),
+            category: String::from_str(&env, "lumber"),
+            quantity: 10,
+            unit: String::from_str(&env, "pieces"),
+            condition: String::from_str(&env, "New"),
+            dimensions: String::from_str(&env, "1x1x1"),
+            gps_lat: 0,
+            gps_lon: 0,
+            photos_cid: String::from_str(&env, "cid"),
+            description: String::from_str(&env, "Test"),
+        };
+        let secret = BytesN::from_array(&env, &[7u8; 32]);
+        let batch_id = batch_client.mint(&seller, &meta, &secret);
+
+        let qr_hash_val = qr_hash(&env, &secret);
+        let path: Vec<Address> = Vec::new(&env);
+        let escrow_id = escrow_client.create_escrow(
+            &batch_id,
+            &buyer,
+            &seller,
+            &usdc,
+            &usdc,
+            &path,
+            &qr_hash_val,
+        );
+        escrow_client.lock_payment(&escrow_id, &500_000_000);
+
+        let wrong_secret = BytesN::from_array(&env, &[99u8; 32]);
+        assert_eq!(
+            escrow_client.try_confirm_pickup(&escrow_id, &wrong_secret),
+            Err(Ok(Error::InvalidQRProof))
+        );
+    }
+
+    #[test]
+    fn test_integration_pool_full_cycle() {
+        let (env, _admin, _seller, _buyer, usdc, pool_id, pool_client, _batch, _escrow) =
+            integration_setup();
+
+        // 1. Deposit tokens into pool and notify contract
+        let sac = token::StellarAssetClient::new(&env, &usdc);
+        sac.mint(&pool_id, &10_000_000);
+        pool_client.receive_fee(&10_000_000);
+        assert_eq!(pool_client.get_balance(), 10_000_000);
+
+        // 2. Propose a recipient
+        let recipient = Address::generate(&env);
+        let pid = pool_client.propose_recipient(
+            &recipient,
+            &String::from_str(&env, "Trade School"),
+            &String::from_str(&env, "QmDoc2"),
+        );
+
+        // 3. Vote to approve
+        pool_client.vote_recipient(&pid, &true);
+        pool_client.vote_recipient(&pid, &true);
+        pool_client.vote_recipient(&pid, &true);
+
+        // 4. Distribute
+        let bal_before = tc(&env, &usdc).balance(&recipient);
+        pool_client.distribute(&0, &3_000_000, &usdc);
+        let bal_after = tc(&env, &usdc).balance(&recipient);
+        assert_eq!(bal_after - bal_before, 3_000_000);
+        assert_eq!(pool_client.get_balance(), 7_000_000);
+
+        // 5. Distribute remaining
+        pool_client.distribute(&0, &7_000_000, &usdc);
+        assert_eq!(pool_client.get_balance(), 0);
     }
 }
