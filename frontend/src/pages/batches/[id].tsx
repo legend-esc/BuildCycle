@@ -2,12 +2,30 @@ import { useRouter } from "next/router";
 import { getBatchById } from "@/utils/mockData";
 import ConditionReportCard from "@/components/ConditionReportCard";
 import { useState } from "react";
+import { useCreateEscrow, useLockPayment, useEscrows } from "@/hooks/useEscrow";
+import { useWalletStore } from "@/stores/useWalletStore";
+import Link from "next/link";
+
+const statusBadgeColors: Record<string, string> = {
+  Created: "bg-blue-100 text-blue-700",
+  Locked: "bg-yellow-100 text-yellow-700",
+  Released: "bg-green-100 text-green-700",
+  Disputed: "bg-red-100 text-red-700",
+  Resolved: "bg-gray-100 text-gray-700",
+};
 
 export default function BatchDetail() {
   const router = useRouter();
   const { id } = router.query;
   const batch = getBatchById(Number(id));
   const [photoIndex, setPhotoIndex] = useState(0);
+  const { isConnected } = useWalletStore();
+  const createEscrow = useCreateEscrow();
+  const lockPayment = useLockPayment();
+  const { data: escrows } = useEscrows();
+  const [purchaseState, setPurchaseState] = useState<"idle" | "creating" | "locking" | "done">("idle");
+
+  const batchEscrow = escrows?.find((e) => e.batchId === Number(id));
 
   if (!batch) {
     return (
@@ -15,6 +33,29 @@ export default function BatchDetail() {
         Batch not found.
       </div>
     );
+  }
+
+  async function handlePurchase() {
+    if (!isConnected) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+    if (!batch) return;
+    setPurchaseState("creating");
+    try {
+      const { escrowId } = await createEscrow.mutateAsync({
+        batchId: batch.id,
+        batchTitle: batch.title,
+        seller: batch.seller,
+        amount: batch.price,
+        asset: batch.paymentAsset,
+      });
+      setPurchaseState("locking");
+      await lockPayment.mutateAsync({ escrowId });
+      setPurchaseState("done");
+    } catch {
+      setPurchaseState("idle");
+    }
   }
 
   return (
@@ -65,6 +106,34 @@ export default function BatchDetail() {
 
           <p className="text-buildcycle-gray-600 leading-relaxed">{batch.description}</p>
 
+          {batchEscrow && (
+            <div className="bg-white border border-buildcycle-gray-200 rounded-xl p-4 space-y-2">
+              <h2 className="text-sm font-semibold text-buildcycle-gray-800">Escrow Status</h2>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusBadgeColors[batchEscrow.status] || "bg-gray-100 text-gray-700"}`}>
+                  {batchEscrow.status}
+                </span>
+                <span className="text-xs text-buildcycle-gray-400">#{batchEscrow.id}</span>
+              </div>
+              {batchEscrow.status === "Locked" && (
+                <Link
+                  href="/scan"
+                  className="inline-block text-xs px-3 py-1.5 bg-buildcycle-orange-500 text-white rounded-lg hover:bg-buildcycle-orange-600 transition"
+                >
+                  Scan QR to Confirm Pickup
+                </Link>
+              )}
+              {batchEscrow.status === "Disputed" && (
+                <Link
+                  href="/disputes"
+                  className="inline-block text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition"
+                >
+                  View Dispute
+                </Link>
+              )}
+            </div>
+          )}
+
           {/* Condition reports */}
           <div>
             <h2 className="text-lg font-semibold text-buildcycle-gray-800 mb-3">Condition Reports</h2>
@@ -91,9 +160,33 @@ export default function BatchDetail() {
               <p className="text-xs text-buildcycle-gray-400 mt-0.5">Fixed price</p>
             </div>
 
-            <button className="w-full py-2.5 bg-buildcycle-orange-500 text-white font-medium rounded-lg hover:bg-buildcycle-orange-600 transition">
-              Purchase
-            </button>
+            {purchaseState === "done" ? (
+              <div className="space-y-2">
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 text-center">
+                  Purchase initiated! Escrow created.
+                </div>
+                <Link
+                  href="/dashboard"
+                  className="block text-center w-full py-2.5 bg-buildcycle-orange-500 text-white font-medium rounded-lg hover:bg-buildcycle-orange-600 transition"
+                >
+                  View in Dashboard
+                </Link>
+              </div>
+            ) : (
+              <button
+                onClick={handlePurchase}
+                disabled={purchaseState !== "idle" || !!batchEscrow}
+                className="w-full py-2.5 bg-buildcycle-orange-500 text-white font-medium rounded-lg hover:bg-buildcycle-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {purchaseState === "creating"
+                  ? "Creating escrow..."
+                  : purchaseState === "locking"
+                  ? "Locking payment..."
+                  : batchEscrow
+                  ? "Already in escrow"
+                  : "Purchase"}
+              </button>
+            )}
 
             <div className="border-t border-buildcycle-gray-100 pt-4 space-y-2 text-sm">
               <div className="flex justify-between">
