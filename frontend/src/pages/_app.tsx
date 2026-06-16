@@ -22,6 +22,9 @@ export default function App({ Component, pageProps }: AppProps) {
               <Link href="/" className="hover:text-buildcycle-orange-600 transition">Map</Link>
               <Link href="/browse" className="hover:text-buildcycle-orange-600 transition">Browse</Link>
               <Link href="/sell" className="hover:text-buildcycle-orange-600 transition">Sell</Link>
+              <Link href="/scan" className="hover:text-buildcycle-orange-600 transition">Scan</Link>
+              <Link href="/disputes" className="hover:text-buildcycle-orange-600 transition">Disputes</Link>
+              <Link href="/pool" className="hover:text-buildcycle-orange-600 transition">Pool</Link>
               <Link href="/dashboard" className="hover:text-buildcycle-orange-600 transition">Dashboard</Link>
             </nav>
             <WalletConnector />
