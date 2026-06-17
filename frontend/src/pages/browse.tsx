@@ -1,6 +1,9 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/router";
+import { useQuery } from "@tanstack/react-query";
 import { MOCK_BATCHES, CATEGORIES, CONDITION_OPTIONS, type BatchCondition } from "@/utils/mockData";
+import { ListingGridSkeleton } from "@/components/LoadingSkeleton";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function ListingGrid() {
   const router = useRouter();
@@ -9,8 +12,17 @@ export default function ListingGrid() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
+  const { data: batches = [], isLoading } = useQuery({
+    queryKey: ["batches"],
+    queryFn: async () => {
+      await new Promise((r) => setTimeout(r, 200)); // simulate network
+      return MOCK_BATCHES;
+    },
+    staleTime: 60_000,
+  });
+
   const filtered = useMemo(() => {
-    return MOCK_BATCHES.filter((b) => {
+    return batches.filter((b) => {
       if (!b.active) return false;
       if (category !== "all" && b.category !== category) return false;
       if (condition !== "all" && b.condition !== condition) return false;
@@ -18,7 +30,7 @@ export default function ListingGrid() {
       if (maxPrice && b.price > Number(maxPrice)) return false;
       return true;
     });
-  }, [category, condition, minPrice, maxPrice]);
+  }, [batches, category, condition, minPrice, maxPrice]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -77,43 +89,49 @@ export default function ListingGrid() {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {filtered.map((batch) => (
-          <button
-            key={batch.id}
-            onClick={() => router.push(`/batches/${batch.id}`)}
-            className="text-left bg-white rounded-xl border border-buildcycle-gray-200 overflow-hidden hover:shadow-md hover:border-buildcycle-orange-300 transition group"
-          >
-            <div className="aspect-[4/3] bg-buildcycle-gray-100 overflow-hidden">
-              {batch.photos[0] && (
-                <img
-                  src={batch.photos[0]}
-                  alt={batch.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                />
-              )}
-            </div>
-            <div className="p-4 space-y-2">
-              <h3 className="font-semibold text-sm text-buildcycle-gray-800 truncate">{batch.title}</h3>
-              <p className="text-lg font-bold text-buildcycle-orange-600">
-                ${batch.price}{" "}
-                <span className="text-xs font-normal text-buildcycle-gray-400">{batch.paymentAsset}</span>
-              </p>
-              <div className="flex items-center justify-between text-xs text-buildcycle-gray-500">
-                <span>{batch.quantity} {batch.unit}</span>
-                <span>{batch.condition}</span>
-              </div>
-              <span className="inline-block text-[10px] uppercase tracking-wider font-semibold text-buildcycle-orange-600 bg-buildcycle-orange-50 px-2 py-0.5 rounded">
-                {batch.category}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
+      <ErrorBoundary>
+        {isLoading ? (
+          <ListingGridSkeleton />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filtered.map((batch) => (
+              <button
+                key={batch.id}
+                onClick={() => router.push(`/batches/${batch.id}`)}
+                className="text-left bg-white rounded-xl border border-buildcycle-gray-200 overflow-hidden hover:shadow-md hover:border-buildcycle-orange-300 transition group"
+              >
+                <div className="aspect-[4/3] bg-buildcycle-gray-100 overflow-hidden">
+                  {batch.photos[0] && (
+                    <img
+                      src={batch.photos[0]}
+                      alt={batch.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                  )}
+                </div>
+                <div className="p-4 space-y-2">
+                  <h3 className="font-semibold text-sm text-buildcycle-gray-800 truncate">{batch.title}</h3>
+                  <p className="text-lg font-bold text-buildcycle-orange-600">
+                    ${batch.price}{" "}
+                    <span className="text-xs font-normal text-buildcycle-gray-400">{batch.paymentAsset}</span>
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-buildcycle-gray-500">
+                    <span>{batch.quantity} {batch.unit}</span>
+                    <span>{batch.condition}</span>
+                  </div>
+                  <span className="inline-block text-[10px] uppercase tracking-wider font-semibold text-buildcycle-orange-600 bg-buildcycle-orange-50 px-2 py-0.5 rounded">
+                    {batch.category}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
-      {filtered.length === 0 && (
-        <p className="text-center text-buildcycle-gray-400 py-16">No listings match your filters.</p>
-      )}
+        {!isLoading && filtered.length === 0 && (
+          <p className="text-center text-buildcycle-gray-400 py-16">No listings match your filters.</p>
+        )}
+      </ErrorBoundary>
     </div>
   );
 }
