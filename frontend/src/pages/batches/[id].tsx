@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useCreateEscrow, useLockPayment, useEscrows } from "@/hooks/useEscrow";
 import { useWalletStore } from "@/stores/useWalletStore";
 import Link from "next/link";
+import { BatchDetailSkeleton } from "@/components/LoadingSkeleton";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const statusBadgeColors: Record<string, string> = {
   Created: "bg-blue-100 text-blue-700",
@@ -26,6 +28,8 @@ export default function BatchDetail() {
   const [purchaseState, setPurchaseState] = useState<"idle" | "creating" | "locking" | "done">("idle");
 
   const batchEscrow = escrows?.find((e) => e.batchId === Number(id));
+
+  if (!router.isReady) return <BatchDetailSkeleton />;
 
   if (!batch) {
     return (
@@ -59,6 +63,7 @@ export default function BatchDetail() {
   }
 
   return (
+    <ErrorBoundary>
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Photo carousel */}
       <div className="relative aspect-[16/9] bg-buildcycle-gray-100 rounded-xl overflow-hidden mb-6">
@@ -214,5 +219,6 @@ export default function BatchDetail() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

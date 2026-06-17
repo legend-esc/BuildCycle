@@ -3,14 +3,28 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import WalletConnector from "@/components/WalletConnector";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import "@/styles/globals.css";
 
 export default function App({ Component, pageProps }: AppProps) {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,        // 30s — map markers, batch listings
+            gcTime: 5 * 60_000,       // 5m cache
+            retry: 2,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-buildcycle-gray-50 text-buildcycle-gray-900">
+      <ErrorBoundary>
+        <div className="min-h-screen bg-buildcycle-gray-50 text-buildcycle-gray-900">
         <header className="sticky top-0 z-50 bg-white border-b border-buildcycle-gray-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
@@ -34,6 +48,7 @@ export default function App({ Component, pageProps }: AppProps) {
           <Component {...pageProps} />
         </main>
       </div>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
