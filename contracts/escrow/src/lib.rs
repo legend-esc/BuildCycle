@@ -507,7 +507,7 @@ mod tests {
         let buyer = Address::generate(&env);
         let batch_token = Address::generate(&env);
 
-        let usdc = env.register_stellar_asset_contract(admin.clone());
+        let usdc = env.register_stellar_asset_contract_v2(admin.clone()).address();
 
         let sac = token::StellarAssetClient::new(&env, &usdc);
         sac.mint(&buyer, &1_000_000_000);
@@ -840,7 +840,7 @@ mod tests {
         let seller = Address::generate(&env);
         let buyer = Address::generate(&env);
 
-        let usdc = env.register_stellar_asset_contract(admin.clone());
+        let usdc = env.register_stellar_asset_contract_v2(admin.clone()).address();
         let sac = token::StellarAssetClient::new(&env, &usdc);
         sac.mint(&buyer, &1_000_000_000);
         sac.mint(&seller, &1_000_000_000);

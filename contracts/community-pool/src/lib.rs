@@ -301,7 +301,7 @@ mod tests {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
-        let usdc = env.register_stellar_asset_contract(admin.clone());
+        let usdc = env.register_stellar_asset_contract_v2(admin.clone()).address();
 
         let contract_id = env.register_contract(None, CommunityPoolContract);
         let client = CommunityPoolContractClient::new(&env, &contract_id);
