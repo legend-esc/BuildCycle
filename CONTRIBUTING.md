@@ -11,6 +11,38 @@ docker-compose up -d
 
 The app will be available at `http://localhost:3000`.
 
+## Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [Reporting Bugs](#reporting-bugs)
+- [Requesting Features](#requesting-features)
+- [Security Vulnerabilities](#security-vulnerabilities)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [Coding Conventions](#coding-conventions)
+- [Pull Request Process](#pull-request-process)
+- [Commit Messages](#commit-messages)
+- [Need Help?](#need-help)
+
+---
+
+## Code of Conduct
+
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
+
+## Reporting Bugs
+
+Open a [Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) — include a clear description, steps to reproduce, environment details, and screenshots if applicable.
+
+## Requesting Features
+
+Open a [Feature Request](.github/ISSUE_TEMPLATE/feature_request.md) — describe the problem you're solving, your proposed solution, and which part of the project it affects.
+
+## Security Vulnerabilities
+
+Please **do not** file public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md) for our disclosure process.
+
 ## Project Structure
 
 ```
@@ -87,10 +119,20 @@ npx ts-node scripts/seed-database.ts
 
 ## Pull Request Process
 
-1. Create a branch from `main` with a descriptive name
-2. Ensure all tests pass (`cargo test`, `npm run lint`, `npm run build`)
-3. Update docs if adding new features
-4. Open a PR against `main` with a clear description of changes
+1. Create a branch from `main` with a descriptive name (e.g. `feat/my-feature`, `fix/bug-description`)
+2. Make your changes, following the [coding conventions](#coding-conventions)
+3. Ensure all tests pass:
+   ```bash
+   cd contracts && cargo test
+   cd ../frontend && npm run lint && npm run build
+   cd ../backend && npx tsc --noEmit && npm run build
+   ```
+4. Update docs if adding new features
+5. Open a PR against `main` using the [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md). Include:
+   - What the change does and why
+   - Which issue it closes (if applicable)
+   - How it was tested
+   - Screenshots for UI changes
 
 ## Commit Messages
 
